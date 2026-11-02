@@ -158,6 +158,20 @@ if (directory === "--source") {
         ],
         { stdio: "inherit" },
       );
+      const response = await fetch(
+        `https://registry.npmjs.org/${encodeURIComponent(entry.name)}/${version}`,
+        { cache: "no-store", signal: AbortSignal.timeout(30_000) },
+      );
+      assert.ok(
+        response.ok,
+        `Publicação não disponível no registro: ${entry.name}@${version} (HTTP ${response.status}). Confira staging ou execute novamente após a propagação.`,
+      );
+      assert.equal(
+        (await response.json()).dist.integrity,
+        entry.integrity,
+        `Conteúdo publicado difere do artifact: ${entry.name}@${version}`,
+      );
+      console.log(`Publicado e conferido: ${entry.name}@${version}`);
     }
   }
 }

@@ -137,21 +137,29 @@ void test("release retoma pacotes idênticos e impede publicação parcial com c
     preload,
     `
     import childProcess from 'node:child_process';
+    import { createHash } from 'node:crypto';
     import { syncBuiltinESMExports } from 'node:module';
-    import { writeFileSync } from 'node:fs';
+    import { readFileSync, writeFileSync } from 'node:fs';
+    import { basename } from 'node:path';
     const exec = childProcess.execFileSync;
     const calls = [];
+    const available = new Map([['${publishedName}', process.env.RELEASE_INTEGRITY]]);
     childProcess.execFileSync = (command, args, options) => {
       if (command !== 'npm') return exec(command, args, options);
       calls.push(args);
       writeFileSync(process.env.RELEASE_TRACE, JSON.stringify(calls));
+      if (process.env.RELEASE_STAGED !== 'true') available.set(
+        basename(args[1], '-${manifest.version}.tgz'),
+        process.env.RELEASE_PUBLISHED_INTEGRITY ?? 'sha512-' + createHash('sha512').update(readFileSync(args[1])).digest('base64'),
+      );
     };
     syncBuiltinESMExports();
     globalThis.fetch = async (url) => {
       if (url.includes('/oasprint-win32-')) throw new Error('Consulta a pacote privado');
+      const name = decodeURIComponent(new URL(url).pathname.split('/')[1]);
       return new Response(
-        JSON.stringify({ dist: { integrity: process.env.RELEASE_INTEGRITY } }),
-        { status: url.includes('/${publishedName}/') ? 200 : 404 },
+        JSON.stringify({ dist: { integrity: available.get(name) } }),
+        { status: available.has(name) ? 200 : 404 },
       );
     };
   `,
@@ -177,6 +185,15 @@ void test("release retoma pacotes idênticos e impede publicação parcial com c
   assert.ok(calls.every((args) => args[0] === "publish" && !args[1].includes(`${publishedName}-`)));
   assert.ok(calls.every((args) => !args[1].includes("oasprint-win32-")));
   assert.equal(calls.at(-1)[1], join(f.artifacts, `${manifest.name}-${manifest.version}.tgz`));
+  await rm(trace);
+  env.RELEASE_STAGED = "true";
+  assert.throws(publish, /Publicação não disponível no registro/);
+  assert.equal(JSON.parse(await readFile(trace, "utf8")).length, 1);
+  delete env.RELEASE_STAGED;
+  env.RELEASE_PUBLISHED_INTEGRITY = "sha512-different";
+  assert.throws(publish, /Conteúdo publicado difere do artifact/);
+  assert.equal(JSON.parse(await readFile(trace, "utf8")).length, 1);
+  delete env.RELEASE_PUBLISHED_INTEGRITY;
   await rm(trace);
   env.RELEASE_INTEGRITY = "sha512-different";
   assert.throws(publish, /Versão já publicada com conteúdo diferente/);

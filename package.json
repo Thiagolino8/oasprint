@@ -1,6 +1,6 @@
 {
   "name": "oasprint",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Tipos OpenAPI diretos e transporte HTTP compacto para clients por método e rota.",
   "keywords": [
     "client",
@@ -66,10 +66,10 @@
     "typescript": "npm:@typescript/typescript6@6.0.2"
   },
   "optionalDependencies": {
-    "oasprint-darwin-arm64": "0.1.0",
-    "oasprint-darwin-x64": "0.1.0",
-    "oasprint-linux-arm64": "0.1.0",
-    "oasprint-linux-x64": "0.1.0"
+    "oasprint-darwin-arm64": "0.1.1",
+    "oasprint-darwin-x64": "0.1.1",
+    "oasprint-linux-arm64": "0.1.1",
+    "oasprint-linux-x64": "0.1.1"
   },
   "engines": {
     "node": ">=24.2"
