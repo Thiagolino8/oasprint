@@ -198,12 +198,6 @@ importers:
       oasprint-linux-x64:
         specifier: 0.1.0
         version: link:npm/linux-x64
-      oasprint-win32-arm64:
-        specifier: 0.1.0
-        version: link:npm/win32-arm64
-      oasprint-win32-x64:
-        specifier: 0.1.0
-        version: link:npm/win32-x64
 
   npm/darwin-arm64: {}
 

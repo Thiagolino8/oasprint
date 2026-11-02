@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { access, cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { access, cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 execFileSync("pnpm", ["run", "check"], { stdio: "inherit" });
@@ -7,9 +7,10 @@ const staging = ".cache/standalone";
 await rm(staging, { recursive: true, force: true });
 await mkdir(staging, { recursive: true });
 const manifest = JSON.parse(await readFile("package.json", "utf8"));
-const platforms = Object.keys(manifest.optionalDependencies).map((name) =>
-  name.slice("oasprint-".length),
-);
+const platforms = (await readdir("npm", { withFileTypes: true }))
+  .filter((entry) => entry.isDirectory())
+  .map((entry) => entry.name)
+  .sort();
 delete manifest.optionalDependencies;
 delete manifest.scripts;
 await writeFile(`${staging}/package.json`, JSON.stringify(manifest, null, 2));

@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
-import { chmod, copyFile, mkdir } from "node:fs/promises";
+import { chmod, copyFile, mkdir, symlink } from "node:fs/promises";
+import { resolve } from "node:path";
 
 const targets = {
   "linux-x64": "x86_64-unknown-linux-musl",
@@ -37,3 +38,9 @@ await copyFile(
 );
 await chmod(`${directory}/${executable}`, 0o755);
 await copyFile("LICENSE", `npm/${platform}/LICENSE`);
+// Unpublished native packages still need to resolve during development and CI.
+try {
+  await symlink(resolve(`npm/${platform}`), `node_modules/oasprint-${platform}`, "junction");
+} catch (error) {
+  if (error.code !== "EEXIST") throw error;
+}

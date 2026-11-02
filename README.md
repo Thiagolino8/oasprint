@@ -74,6 +74,8 @@ O `.env` preserva valores literais com `$`, comentários, aspas e prioridade das
 
 Os pacotes opcionais `oasprint-linux-{x64,arm64}`, `oasprint-darwin-{x64,arm64}` e `oasprint-win32-{x64,arm64}` fornecem os binários. Linux usa musl estático para dispensar uma versão específica da glibc. A instalação do consumidor não compila Rust nem executa download em postinstall; mantenha dependências opcionais habilitadas.
 
+A publicação dos dois pacotes Windows está suspensa enquanto o npm revisa o bloqueio dos nomes. Seus manifests têm `private: true`, que impede a publicação, mas os binários continuam sendo compilados e testados na CI. O principal declara apenas os quatro opcionais Linux/macOS já publicados; nomes Windows sem propriedade comprovada não entram nas dependências públicas. O runtime funciona no browser em qualquer sistema, e a CLI publicada atende Linux/macOS. Em Windows nativo, a CLI depende da liberação dos pacotes; o tarball autocontido de desenvolvimento mantém os seis binários. Após a liberação, remova `private` dos manifests Windows, publique-os e adicione os opcionais ao principal em uma versão nova.
+
 Os builds Linux com musl usam mimalloc para evitar contenção de alocações entre os workers, com prioridade ao tempo de geração. Isso pode aumentar o pico de RAM em máquinas com transparent huge pages. Uma configuração com uma única API roda na própria thread. A emissão reutiliza referências e aliases já resolvidos, mantém o grafo de projeções em vetores e evita cópias dos schemas. Essas otimizações preservam os bytes gerados e o mtime de outputs idênticos.
 
 O perfil release usa `opt-level = 2`, LTO completo e uma unidade de geração de código para reduzir os executáveis. A compilação para distribuir o pacote fica mais demorada; a instalação e a geração dos consumidores usam o binário pronto. O perfil mantém o tratamento de panics e o suporte às seis plataformas.
@@ -98,7 +100,7 @@ O [workflow `ci.yml`](.github/workflows/ci.yml) compila, verifica e testa as sei
 
 Tags `v<versão>` publicam automaticamente no npm por OIDC, depois de todas as verificações. O job de publicação tem permissão `id-token: write`; os demais têm apenas leitura do repositório. Versões preliminares recebem a dist-tag `next`; as demais, `latest`. `workflow_dispatch` apenas valida e gera os pacotes.
 
-Na primeira publicação, a conta npm precisa criar os sete pacotes. Baixe o artifact `npm-packages` de uma execução aprovada da branch `main`, faça `npm login` e publique os seis tarballs nativos com `npm publish <arquivo.tgz> --access public --ignore-scripts`; publique `oasprint-<versão>.tgz` por último. Depois, nas configurações de **cada pacote** no npm, cadastre o [trusted publisher](https://docs.npmjs.com/trusted-publishers/):
+Na primeira publicação, a conta npm precisa criar os pacotes com publicação habilitada. Baixe o artifact `npm-packages` de uma execução aprovada da branch `main`, faça `npm login` e publique os tarballs nativos cujos manifests não têm `private: true` com `npm publish <arquivo.tgz> --access public --ignore-scripts`; publique `oasprint-<versão>.tgz` por último. Depois, nas configurações de **cada pacote publicado** no npm, cadastre o [trusted publisher](https://docs.npmjs.com/trusted-publishers/):
 
 - Provider: GitHub Actions.
 - Organization/user: `Thiagolino8`.
@@ -116,7 +118,7 @@ git tag v0.1.1
 git push origin v0.1.1
 ```
 
-O release recusa versões, manifests, licenças ou entrypoints divergentes. Publica os nativos antes do principal. Se uma execução publicar apenas parte deles, use **Re-run failed jobs** nessa execução: os tarballs já publicados só são ignorados quando a integridade corresponde exatamente ao artifact. Se houver divergência, use uma versão nova; versões npm não podem ser substituídas.
+O release recusa versões, manifests, licenças ou entrypoints divergentes e valida todos os sete artifacts. Na publicação, ignora os manifests com `private: true` e publica os demais nativos antes do principal. Falhas inesperadas nos pacotes habilitados continuam interrompendo o release. Se uma execução publicar apenas parte deles, use **Re-run failed jobs** nessa execução: os tarballs já publicados só são ignorados quando a integridade corresponde exatamente ao artifact. Se houver divergência, use uma versão nova; versões npm não podem ser substituídas.
 
 O `prepack` local exige build, lint e testes. O tarball de `pack:local` inclui os seis binários para integrar na aplicação antes da publicação. Antes de executá-lo, extraia os tarballs nativos produzidos pelo workflow nos diretórios correspondentes `npm/<plataforma>/`; o comando falha se faltar alguma plataforma. Esse tarball autocontido não é usado pelo release público.
 

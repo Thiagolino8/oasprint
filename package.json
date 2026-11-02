@@ -69,9 +69,7 @@
     "oasprint-darwin-arm64": "0.1.0",
     "oasprint-darwin-x64": "0.1.0",
     "oasprint-linux-arm64": "0.1.0",
-    "oasprint-linux-x64": "0.1.0",
-    "oasprint-win32-arm64": "0.1.0",
-    "oasprint-win32-x64": "0.1.0"
+    "oasprint-linux-x64": "0.1.0"
   },
   "engines": {
     "node": ">=24.2"

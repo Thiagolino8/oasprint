@@ -8,15 +8,27 @@ const root = new URL("../", import.meta.url);
 const manifest = JSON.parse(await readFile(new URL("package.json", root), "utf8"));
 const { name, version, optionalDependencies, repository } = manifest;
 const expected = [manifest];
-for (const nativeName of Object.keys(optionalDependencies)) {
-  const platform = nativeName.slice(`${name}-`.length);
+for (const directory of (await readdir(new URL("npm/", root), { withFileTypes: true })).sort(
+  (a, b) => a.name.localeCompare(b.name),
+)) {
+  if (!directory.isDirectory()) continue;
+  const platform = directory.name;
   const native = JSON.parse(await readFile(new URL(`npm/${platform}/package.json`, root), "utf8"));
-  assert.equal(native.name, nativeName);
-  assert.equal(native.version, version, `Versão divergente em ${nativeName}`);
-  assert.equal(optionalDependencies[nativeName], version);
+  assert.equal(native.name, `${name}-${platform}`);
+  assert.equal(native.version, version, `Versão divergente em ${native.name}`);
+  if (native.private !== true) assert.equal(optionalDependencies[native.name], version);
   assert.equal(native.repository.url, repository.url);
   expected.push(native);
 }
+assert.deepEqual(
+  Object.keys(optionalDependencies).sort(),
+  expected
+    .slice(1)
+    .filter((entry) => entry.private !== true)
+    .map((entry) => entry.name)
+    .sort(),
+  "Dependências opcionais devem incluir apenas os pacotes nativos com publicação habilitada",
+);
 const cargo = await readFile(new URL("native/Cargo.toml", root), "utf8");
 const lock = await readFile(new URL("native/Cargo.lock", root), "utf8");
 assert.equal(cargo.match(/^version = "([^"]+)"/m)?.[1], version, "Versão divergente no Cargo.toml");
@@ -87,7 +99,7 @@ if (directory === "--source") {
     const integrity = `sha512-${createHash("sha512")
       .update(await readFile(archive))
       .digest("base64")}`;
-    packages.push({ name: source.name, archive, integrity });
+    packages.push({ name: source.name, archive, integrity, private: source.private === true });
   }
   console.log(`Validados ${packages.length} pacotes na versão ${version}`);
   if (mode === "--publish") {
@@ -110,6 +122,10 @@ if (directory === "--source") {
     // Check every existing version before publishing anything; retries only skip identical tarballs.
     const pending = [];
     for (const entry of packages) {
+      if (entry.private) {
+        console.log(`Publicação suspensa (private): ${entry.name}`);
+        continue;
+      }
       const response = await fetch(
         `https://registry.npmjs.org/${encodeURIComponent(entry.name)}/${version}`,
         { signal: AbortSignal.timeout(30_000) },

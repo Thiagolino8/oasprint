@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -23,8 +23,7 @@ const fixture = async (t) => {
   const artifacts = join(directory, "artifacts");
   await mkdir(artifacts);
   const manifests = [manifest];
-  for (const name of Object.keys(manifest.optionalDependencies)) {
-    const platform = name.slice(`${manifest.name}-`.length);
+  for (const platform of await readdir(new URL("npm/", root))) {
     manifests.push(
       JSON.parse(await readFile(new URL(`npm/${platform}/package.json`, root), "utf8")),
     );
@@ -68,7 +67,7 @@ void test("release exige todos os pacotes e a tag correspondente à versão", as
     () => run(["--source"], { GITHUB_REF: "refs/tags/v99.0.0" }),
     /Tag e versão divergem/,
   );
-  await rm(join(f.artifacts, `oasprint-linux-x64-${manifest.version}.tgz`));
+  await rm(join(f.artifacts, `oasprint-win32-x64-${manifest.version}.tgz`));
   assert.throws(() => run([f.artifacts]), /São necessários o principal e todos os pacotes nativos/);
 });
 
@@ -84,6 +83,33 @@ void test("release rejeita manifesto e executável ausente no tarball", async (t
   await rm(join(tree, "dist", "cli.mjs"));
   pack();
   assert.throws(() => run([f.artifacts]), /Entrada ausente/);
+});
+
+void test("release rejeita dependência pública de nativo com publicação suspensa", async (t) => {
+  const f = await fixture(t);
+  const source = join(f.directory, "source");
+  await mkdir(join(source, "scripts"), { recursive: true });
+  await mkdir(join(source, "native"));
+  await copyFile(script, join(source, "scripts/release.mjs"));
+  for (const filename of ["Cargo.toml", "Cargo.lock"]) {
+    await copyFile(new URL(`native/${filename}`, root), join(source, "native", filename));
+  }
+  for (const platform of await readdir(new URL("npm/", root))) {
+    const directory = join(source, "npm", platform);
+    await mkdir(directory, { recursive: true });
+    await copyFile(new URL(`npm/${platform}/package.json`, root), join(directory, "package.json"));
+  }
+  const unsafe = structuredClone(manifest);
+  unsafe.optionalDependencies["oasprint-win32-arm64"] = manifest.version;
+  await writeFile(join(source, "package.json"), JSON.stringify(unsafe));
+  assert.throws(
+    () =>
+      execFileSync(process.execPath, [join(source, "scripts/release.mjs"), "--source"], {
+        stdio: "pipe",
+        env: { ...process.env, GITHUB_REF: "refs/heads/main" },
+      }),
+    /Dependências opcionais devem incluir apenas os pacotes nativos com publicação habilitada/,
+  );
 });
 
 void test("release não publica fora do evento autorizado", async (t) => {
@@ -121,10 +147,13 @@ void test("release retoma pacotes idênticos e impede publicação parcial com c
       writeFileSync(process.env.RELEASE_TRACE, JSON.stringify(calls));
     };
     syncBuiltinESMExports();
-    globalThis.fetch = async (url) => new Response(
-      JSON.stringify({ dist: { integrity: process.env.RELEASE_INTEGRITY } }),
-      { status: url.includes('/${publishedName}/') ? 200 : 404 },
-    );
+    globalThis.fetch = async (url) => {
+      if (url.includes('/oasprint-win32-')) throw new Error('Consulta a pacote privado');
+      return new Response(
+        JSON.stringify({ dist: { integrity: process.env.RELEASE_INTEGRITY } }),
+        { status: url.includes('/${publishedName}/') ? 200 : 404 },
+      );
+    };
   `,
   );
   const env = {
@@ -144,8 +173,9 @@ void test("release retoma pacotes idênticos e impede publicação parcial com c
     );
   publish();
   const calls = JSON.parse(await readFile(trace, "utf8"));
-  assert.equal(calls.length, 6);
+  assert.equal(calls.length, 4);
   assert.ok(calls.every((args) => args[0] === "publish" && !args[1].includes(`${publishedName}-`)));
+  assert.ok(calls.every((args) => !args[1].includes("oasprint-win32-")));
   assert.equal(calls.at(-1)[1], join(f.artifacts, `${manifest.name}-${manifest.version}.tgz`));
   await rm(trace);
   env.RELEASE_INTEGRITY = "sha512-different";
