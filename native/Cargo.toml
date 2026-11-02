@@ -1,0 +1,25 @@
+[package]
+name = "oasprint"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+license = "MIT"
+publish = false
+
+[workspace]
+
+[dependencies]
+serde_json = { version = "1.0.145", features = ["preserve_order", "float_roundtrip"] }
+percent-encoding = "2.3.2"
+ryu-js = "1.0.3"
+ureq = { version = "=3.3.0", default-features = false, features = ["rustls", "gzip"] }
+url = "2.5"
+
+[target.'cfg(all(target_os = "linux", target_env = "musl"))'.dependencies]
+mimalloc = "=0.1.52"
+
+[profile.release]
+opt-level = 2
+lto = "fat"
+codegen-units = 1
+strip = true

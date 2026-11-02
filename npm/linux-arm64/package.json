@@ -1,0 +1,24 @@
+{
+  "name": "oasprint-linux-arm64",
+  "version": "0.1.0",
+  "description": "Binário nativo linux/arm64 do oasprint",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Thiagolino8/oasprint.git",
+    "directory": "npm/linux-arm64"
+  },
+  "files": [
+    "bin",
+    "LICENSE"
+  ],
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "arm64"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}

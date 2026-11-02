@@ -1,0 +1,7 @@
+{
+  "plugins": ["typescript", "import"],
+  "ignorePatterns": ["dist/**", "node_modules/**"],
+  "rules": {
+    "typescript/no-explicit-any": "error"
+  }
+}

@@ -1,0 +1,80 @@
+{
+  "name": "oasprint",
+  "version": "0.1.0",
+  "description": "Tipos OpenAPI diretos e transporte HTTP compacto para clients por método e rota.",
+  "keywords": [
+    "client",
+    "codegen",
+    "fetch",
+    "openapi",
+    "typescript"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Thiagolino8/oasprint.git"
+  },
+  "bin": {
+    "oasprint": "./dist/cli.mjs"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "sideEffects": [
+    "./dist/cli.mjs"
+  ],
+  "main": "./dist/runtime.js",
+  "types": "./dist/runtime.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/runtime.d.ts",
+      "import": "./dist/runtime.js"
+    },
+    "./generator": {
+      "types": "./dist/generator.d.mts",
+      "import": "./dist/generator.mjs"
+    },
+    "./generate": {
+      "types": "./dist/generate.d.mts",
+      "import": "./dist/generate.mjs"
+    },
+    "./cli": "./dist/cli.mjs",
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "check": "pnpm run build && pnpm run lint && pnpm run test:rust && pnpm run test",
+    "lint": "oxfmt --check . && oxlint",
+    "prepack": "pnpm run check",
+    "test": "node --test test/*.test.mjs",
+    "pack:local": "node scripts/pack-local.mjs",
+    "test:rust": "cargo +1.99.1 test --manifest-path native/Cargo.toml --locked --target-dir .cache/native-target",
+    "test:package": "node scripts/test-package.mjs"
+  },
+  "dependencies": {
+    "openapi-fetch": "0.17.0"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.5",
+    "oxfmt": "0.73.0",
+    "oxlint": "1.88.0",
+    "tsrs": "0.20.1-ts7.1.0-beta",
+    "typescript": "npm:@typescript/typescript6@6.0.2"
+  },
+  "optionalDependencies": {
+    "oasprint-darwin-arm64": "0.1.0",
+    "oasprint-darwin-x64": "0.1.0",
+    "oasprint-linux-arm64": "0.1.0",
+    "oasprint-linux-x64": "0.1.0",
+    "oasprint-win32-arm64": "0.1.0",
+    "oasprint-win32-x64": "0.1.0"
+  },
+  "engines": {
+    "node": ">=24.2"
+  },
+  "packageManager": "pnpm@12.8.1"
+}

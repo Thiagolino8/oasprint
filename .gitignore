@@ -1,0 +1,9 @@
+node_modules/
+dist/
+*.tgz
+.env
+.env.*
+.cache/
+npm/*/bin/
+native/target/
+npm/*/LICENSE

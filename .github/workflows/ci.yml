@@ -1,0 +1,118 @@
+name: Validação e pacotes
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native:
+    strategy: &platforms
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            package: linux-x64
+            target: x86_64-unknown-linux-musl
+          - runner: ubuntu-24.04-arm
+            package: linux-arm64
+            target: aarch64-unknown-linux-musl
+          - runner: macos-15-intel
+            package: darwin-x64
+            target: x86_64-apple-darwin
+          - runner: macos-15
+            package: darwin-arm64
+            target: aarch64-apple-darwin
+          - runner: windows-latest
+            package: win32-x64
+            target: x86_64-pc-windows-msvc
+          - runner: windows-11-arm
+            package: win32-arm64
+            target: aarch64-pc-windows-msvc
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - run: rustup toolchain install 1.99.1 --profile minimal --component rustfmt --component clippy
+      - run: rustup target add --toolchain 1.99.1 ${{ matrix.target }}
+      - run: pnpm install --frozen-lockfile
+      - run: node scripts/release.mjs --source
+      - run: pnpm run check
+      - run: cargo +1.99.1 fmt --manifest-path native/Cargo.toml --check
+      - run: cargo +1.99.1 clippy --manifest-path native/Cargo.toml --locked -- -D warnings
+      - run: npm pack --ignore-scripts
+        working-directory: npm/${{ matrix.package }}
+      - if: matrix.package == 'linux-x64'
+        run: npm pack --ignore-scripts
+      - if: matrix.package == 'linux-x64'
+        uses: actions/upload-artifact@v4
+        with:
+          name: main-package
+          path: oasprint-*.tgz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.package }}
+          path: npm/${{ matrix.package }}/*.tgz
+  package:
+    needs: native
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: native-*
+          path: artifacts
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: main-package
+          path: artifacts
+      - run: node scripts/release.mjs artifacts
+      - uses: actions/upload-artifact@v4
+        with:
+          name: npm-packages
+          path: artifacts/*.tgz
+  install:
+    needs: package
+    strategy: *platforms
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@v4
+        with:
+          name: npm-packages
+          path: artifacts
+      - run: npm run test:package -- artifacts
+  publish:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: [package, install]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+    concurrency:
+      group: npm-release
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - uses: actions/download-artifact@v4
+        with:
+          name: npm-packages
+          path: artifacts
+      - run: node scripts/release.mjs artifacts --publish

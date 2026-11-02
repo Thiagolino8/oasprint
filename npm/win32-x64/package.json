@@ -1,0 +1,24 @@
+{
+  "name": "oasprint-win32-x64",
+  "version": "0.1.0",
+  "description": "Binário nativo win32/x64 do oasprint",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Thiagolino8/oasprint.git",
+    "directory": "npm/win32-x64"
+  },
+  "files": [
+    "bin",
+    "LICENSE"
+  ],
+  "os": [
+    "win32"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}

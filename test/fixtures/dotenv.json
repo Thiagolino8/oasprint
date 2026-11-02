@@ -1,0 +1,34 @@
+[
+  {
+    "source": "A=one\nB= two # comment\nC=\"three # kept\"\nD=' literal $A '\nE=`backticks`\nexport F = $A\nG=${A}\nEMPTY=\nA=last\n",
+    "expected": {
+      "A": "last",
+      "B": "two",
+      "C": "three # kept",
+      "D": " literal $A ",
+      "E": "backticks",
+      "EMPTY": "",
+      "F": "$A",
+      "G": "${A}"
+    }
+  },
+  {
+    "source": "﻿export A=\"one\\ntwo\\t\"\r\nB=\"multi\nline\"\nC='x\ny'\n# COMMENT=skip\nINVALID LINE\nD=value#comment\n",
+    "expected": {
+      "B": "multi\nline",
+      "C": "x\ny",
+      "D": "value",
+      "﻿export A": "one\ntwo\\t"
+    }
+  },
+  {
+    "source": "A=\"escaped \\\" quote\"\nB=\"a\\r\\nb\"\nC=123\nexport\tD=tab\nE=unclosed\"quote\n",
+    "expected": {
+      "A": "escaped \\",
+      "B": "a\\r\nb",
+      "C": "123",
+      "E": "unclosed\"quote",
+      "export\tD": "tab"
+    }
+  }
+]

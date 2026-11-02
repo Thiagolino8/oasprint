@@ -1,0 +1,24 @@
+{
+  "name": "oasprint-darwin-x64",
+  "version": "0.1.0",
+  "description": "Binário nativo darwin/x64 do oasprint",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Thiagolino8/oasprint.git",
+    "directory": "npm/darwin-x64"
+  },
+  "files": [
+    "bin",
+    "LICENSE"
+  ],
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}
