@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFile, readdir } from "node:fs/promises";
 import { resolve } from "node:path";
+import { setTimeout } from "node:timers/promises";
 
 const root = new URL("../", import.meta.url);
 const manifest = JSON.parse(await readFile(new URL("package.json", root), "utf8"));
@@ -130,8 +131,10 @@ if (directory === "--source") {
         `https://registry.npmjs.org/${encodeURIComponent(entry.name)}/${version}`,
         { signal: AbortSignal.timeout(30_000) },
       );
-      if (response.status === 404) pending.push(entry);
-      else {
+      if (response.status === 404) {
+        await response.body?.cancel();
+        pending.push(entry);
+      } else {
         assert.ok(response.ok, `Falha ao consultar ${entry.name}: HTTP ${response.status}`);
         const published = await response.json();
         assert.equal(
@@ -142,36 +145,55 @@ if (directory === "--source") {
         console.log(`Já publicado: ${entry.name}@${version}`);
       }
     }
-    // Native packages must exist before the main package becomes installable.
-    pending.sort((a, b) => Number(a.name === name) - Number(b.name === name));
-    for (const entry of pending) {
-      execFileSync(
-        "npm",
-        [
-          "publish",
-          entry.archive,
-          "--access",
-          "public",
-          "--ignore-scripts",
-          "--tag",
-          version.includes("-") ? "next" : "latest",
-        ],
-        { stdio: "inherit" },
+    // Upload native packages together, then await their processing before publishing the main one.
+    const delays = [0, 2_000, 4_000, 8_000, 16_000, 30_000, 60_000, 60_000, 60_000, 60_000];
+    for (const batch of [
+      pending.filter((entry) => entry.name !== name),
+      pending.filter((entry) => entry.name === name),
+    ]) {
+      for (const entry of batch) {
+        execFileSync(
+          "npm",
+          [
+            "publish",
+            entry.archive,
+            "--access",
+            "public",
+            "--ignore-scripts",
+            "--tag",
+            version.includes("-") ? "next" : "latest",
+          ],
+          { stdio: "inherit" },
+        );
+      }
+      await Promise.all(
+        batch.map(async (entry) => {
+          for (const [attempt, delay] of delays.entries()) {
+            if (delay) await setTimeout(delay);
+            const response = await fetch(
+              `https://registry.npmjs.org/${encodeURIComponent(entry.name)}/${version}`,
+              { cache: "no-store", signal: AbortSignal.timeout(30_000) },
+            );
+            if (response.status === 404 && attempt < delays.length - 1) {
+              await response.body?.cancel();
+              if (attempt === 0)
+                console.log(`Aguardando processamento no npm: ${entry.name}@${version}`);
+              continue;
+            }
+            assert.ok(
+              response.ok,
+              `Publicação não disponível no registro: ${entry.name}@${version} (HTTP ${response.status}). Confira staging ou execute novamente após a propagação.`,
+            );
+            assert.equal(
+              (await response.json()).dist.integrity,
+              entry.integrity,
+              `Conteúdo publicado difere do artifact: ${entry.name}@${version}`,
+            );
+            console.log(`Publicado e conferido: ${entry.name}@${version}`);
+            break;
+          }
+        }),
       );
-      const response = await fetch(
-        `https://registry.npmjs.org/${encodeURIComponent(entry.name)}/${version}`,
-        { cache: "no-store", signal: AbortSignal.timeout(30_000) },
-      );
-      assert.ok(
-        response.ok,
-        `Publicação não disponível no registro: ${entry.name}@${version} (HTTP ${response.status}). Confira staging ou execute novamente após a propagação.`,
-      );
-      assert.equal(
-        (await response.json()).dist.integrity,
-        entry.integrity,
-        `Conteúdo publicado difere do artifact: ${entry.name}@${version}`,
-      );
-      console.log(`Publicado e conferido: ${entry.name}@${version}`);
     }
   }
 }

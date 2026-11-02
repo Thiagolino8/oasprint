@@ -132,6 +132,7 @@ void test("release retoma pacotes idênticos e impede publicação parcial com c
     .update(await readFile(join(f.artifacts, `${publishedName}-${manifest.version}.tgz`)))
     .digest("base64")}`;
   const trace = join(f.directory, "publish.json");
+  const waits = join(f.directory, "waits.json");
   const preload = join(f.directory, "mock.mjs");
   await writeFile(
     preload,
@@ -141,15 +142,27 @@ void test("release retoma pacotes idênticos e impede publicação parcial com c
     import { syncBuiltinESMExports } from 'node:module';
     import { readFileSync, writeFileSync } from 'node:fs';
     import { basename } from 'node:path';
+    import timers from 'node:timers/promises';
     const exec = childProcess.execFileSync;
     const calls = [];
     const available = new Map([['${publishedName}', process.env.RELEASE_INTEGRITY]]);
+    const confirmed = new Set(['${publishedName}']);
+    const processing = new Map();
+    const waits = [];
+    timers.setTimeout = async (delay) => {
+      waits.push(delay);
+      writeFileSync(process.env.RELEASE_WAITS, JSON.stringify(waits));
+    };
     childProcess.execFileSync = (command, args, options) => {
       if (command !== 'npm') return exec(command, args, options);
+      const name = basename(args[1], '-${manifest.version}.tgz');
+      if (name === '${manifest.name}' && ${JSON.stringify(Object.keys(manifest.optionalDependencies))}.some((native) => !confirmed.has(native)))
+        throw new Error('Principal antes dos nativos disponíveis');
       calls.push(args);
       writeFileSync(process.env.RELEASE_TRACE, JSON.stringify(calls));
+      processing.set(name, 0);
       if (process.env.RELEASE_STAGED !== 'true') available.set(
-        basename(args[1], '-${manifest.version}.tgz'),
+        name,
         process.env.RELEASE_PUBLISHED_INTEGRITY ?? 'sha512-' + createHash('sha512').update(readFileSync(args[1])).digest('base64'),
       );
     };
@@ -157,6 +170,12 @@ void test("release retoma pacotes idênticos e impede publicação parcial com c
     globalThis.fetch = async (url) => {
       if (url.includes('/oasprint-win32-')) throw new Error('Consulta a pacote privado');
       const name = decodeURIComponent(new URL(url).pathname.split('/')[1]);
+      if (process.env.RELEASE_PROCESSING === 'true' && processing.has(name)) {
+        const attempt = processing.get(name);
+        processing.set(name, attempt + 1);
+        if (attempt < 2) return new Response(null, { status: 404 });
+      }
+      if (available.has(name)) confirmed.add(name);
       return new Response(
         JSON.stringify({ dist: { integrity: available.get(name) } }),
         { status: available.has(name) ? 200 : 404 },
@@ -171,6 +190,7 @@ void test("release retoma pacotes idênticos e impede publicação parcial com c
     GITHUB_REF: `refs/tags/v${manifest.version}`,
     GITHUB_REPOSITORY: "Thiagolino8/oasprint",
     RELEASE_TRACE: trace,
+    RELEASE_WAITS: waits,
     RELEASE_INTEGRITY: integrity,
   };
   const publish = () =>
@@ -186,13 +206,20 @@ void test("release retoma pacotes idênticos e impede publicação parcial com c
   assert.ok(calls.every((args) => !args[1].includes("oasprint-win32-")));
   assert.equal(calls.at(-1)[1], join(f.artifacts, `${manifest.name}-${manifest.version}.tgz`));
   await rm(trace);
+  env.RELEASE_PROCESSING = "true";
+  publish();
+  assert.equal(JSON.parse(await readFile(trace, "utf8")).length, 4);
+  assert.ok(JSON.parse(await readFile(waits, "utf8")).length > 0);
+  delete env.RELEASE_PROCESSING;
+  await rm(trace);
   env.RELEASE_STAGED = "true";
   assert.throws(publish, /Publicação não disponível no registro/);
-  assert.equal(JSON.parse(await readFile(trace, "utf8")).length, 1);
+  const nativeCount = Object.keys(manifest.optionalDependencies).length - 1;
+  assert.equal(JSON.parse(await readFile(trace, "utf8")).length, nativeCount);
   delete env.RELEASE_STAGED;
   env.RELEASE_PUBLISHED_INTEGRITY = "sha512-different";
   assert.throws(publish, /Conteúdo publicado difere do artifact/);
-  assert.equal(JSON.parse(await readFile(trace, "utf8")).length, 1);
+  assert.equal(JSON.parse(await readFile(trace, "utf8")).length, nativeCount);
   delete env.RELEASE_PUBLISHED_INTEGRITY;
   await rm(trace);
   env.RELEASE_INTEGRITY = "sha512-different";
