@@ -4,6 +4,8 @@ import { createTypedApiClient, ApiClientError } from "oasprint";
 import { generateClient } from "oasprint/generator";
 import { generateClients } from "oasprint/generate";
 
+assert.throws(() => import.meta.resolve("openapi-fetch"), { code: "ERR_MODULE_NOT_FOUND" });
+
 const document = {
   openapi: "3.1.0",
   paths: {

@@ -165,14 +165,13 @@ settings:
 importers:
 
   .:
-    dependencies:
-      openapi-fetch:
-        specifier: 0.17.0
-        version: 0.17.0
     devDependencies:
       '@types/node':
         specifier: 26.6.5
         version: 26.6.5
+      openapi-fetch:
+        specifier: 0.17.0
+        version: 0.17.0
       oxfmt:
         specifier: 0.73.0
         version: 0.73.0
@@ -187,16 +186,16 @@ importers:
         version: '@typescript/typescript6@6.0.2'
     optionalDependencies:
       oasprint-darwin-arm64:
-        specifier: 0.1.1
+        specifier: 0.1.2
         version: link:npm/darwin-arm64
       oasprint-darwin-x64:
-        specifier: 0.1.1
+        specifier: 0.1.2
         version: link:npm/darwin-x64
       oasprint-linux-arm64:
-        specifier: 0.1.1
+        specifier: 0.1.2
         version: link:npm/linux-arm64
       oasprint-linux-x64:
-        specifier: 0.1.1
+        specifier: 0.1.2
         version: link:npm/linux-x64
 
   npm/darwin-arm64: {}

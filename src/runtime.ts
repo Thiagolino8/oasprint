@@ -1,59 +1,24 @@
+import type { ApiRequestOptions, HeadersOptions, HttpMethod } from "./options.js";
 import {
-  type ClientOptions,
-  type FetchOptions,
-  type FetchResponse,
-  createFinalURL,
+  applyHeaders,
+  createPathSerializer,
   createQuerySerializer,
-  defaultBodySerializer,
-  defaultPathSerializer,
-  mergeHeaders,
-  removeTrailingSlash,
-} from "openapi-fetch";
+  serializeBody,
+} from "./serialization.js";
 import type { ApiClientErrorOptions } from "./error.js";
 export { ApiClientError, type ApiClientErrorOptions } from "./error.js";
+export type { ApiClientFromPaths, ApiRequestOptions } from "./options.js";
 
-// As assinaturas geradas já contêm params/body e a projeção read/write.
-// Estas opções não instanciam os tipos condicionais de openapi-fetch por rota.
-export type ApiRequestOptions = Omit<RequestInit, "body" | "headers" | "method"> &
-  Pick<ClientOptions, "headers" | "querySerializer" | "fetch" | "baseUrl" | "pathSerializer"> & {
-    bodySerializer?: (body: unknown) => BodyInit | undefined;
-  };
-
-type HttpMethod = "delete" | "get" | "patch" | "post" | "put";
-
-type ProvisionalRequestOptions<Operation> = Omit<FetchOptions<Operation>, "parseAs" | "middleware">;
-
-// Só contratos provisórios, ainda fora dos OpenAPI publicados, usam esta
-// adaptação. Contratos gerados já exportam funções diretas em `client`.
-export type ApiClientFromPaths<Paths> = {
-  [Method in HttpMethod]: {
-    [
-      Path in keyof Paths as Paths[Path] extends Record<Method, object> ? Path : never
-    ]: Paths[Path] extends Record<Method, infer Operation extends Record<string, unknown>>
-      ? {} extends ProvisionalRequestOptions<Operation>
-        ? (
-            init?: ProvisionalRequestOptions<Operation>,
-          ) => Promise<NonNullable<FetchResponse<Operation, object, `${string}/${string}`>["data"]>>
-        : (
-            init: ProvisionalRequestOptions<Operation>,
-          ) => Promise<NonNullable<FetchResponse<Operation, object, `${string}/${string}`>["data"]>>
-      : never;
-  };
-};
-
-type RuntimeRequestOptions = Omit<ApiRequestOptions, "bodySerializer"> & {
-  bodySerializer?: typeof serializeBody;
+type RuntimeRequestOptions = ApiRequestOptions & {
   params?: {
     query?: Record<string, unknown>;
     path?: Record<string, unknown>;
-    header?: ClientOptions["headers"];
+    header?: HeadersOptions;
   };
   body?: unknown;
 };
 
-// A implementação instalada aceita headers, mas sua declaração omite o argumento.
-const serializeBody: (body: unknown, headers?: Headers) => BodyInit | undefined =
-  defaultBodySerializer;
+const removeTrailingSlash = (url: string) => (url.endsWith("/") ? url.slice(0, -1) : url);
 
 export const createTypedApiClient = <Client extends object>({
   baseUrl,
@@ -63,7 +28,7 @@ export const createTypedApiClient = <Client extends object>({
   onRequest,
   querySerializer,
   service,
-}: Pick<ClientOptions, "fetch" | "headers" | "querySerializer"> & {
+}: Pick<ApiRequestOptions, "fetch" | "headers" | "querySerializer"> & {
   baseUrl: string;
   errorClass: new (options: ApiClientErrorOptions) => Error;
   onRequest?: (request: Request, schemaPath: string) => Request | Promise<Request>;
@@ -81,6 +46,8 @@ export const createTypedApiClient = <Client extends object>({
         new Proxy(Object.create(null), {
           get: (_target, path: string | symbol) => {
             if (typeof path !== "string" || path[0] !== "/") return undefined;
+            const routeUrl = normalizedBaseUrl + path;
+            const serializeRoute = createPathSerializer(routeUrl);
             return (routes[path] = async ({
               baseUrl: localBaseUrl,
               fetch = baseFetch,
@@ -88,7 +55,7 @@ export const createTypedApiClient = <Client extends object>({
               params = {},
               body,
               bodySerializer = serializeBody,
-              pathSerializer = defaultPathSerializer,
+              pathSerializer,
               querySerializer: localQuerySerializer,
               ...init
             }: RuntimeRequestOptions = {}) => {
@@ -100,32 +67,31 @@ export const createTypedApiClient = <Client extends object>({
                       ...(typeof querySerializer === "object" ? querySerializer : {}),
                       ...localQuerySerializer,
                     });
-              const mergedHeaders = mergeHeaders(baseHeaders, headers, params.header);
+              const mergedHeaders = new Headers();
+              const contentType = applyHeaders(mergedHeaders, baseHeaders, headers, params.header);
               const serializedBody =
                 body === undefined ? undefined : bodySerializer(body, mergedHeaders);
-              let request = new Request(
-                createFinalURL(path, {
-                  baseUrl: localBaseUrl ? removeTrailingSlash(localBaseUrl) : normalizedBaseUrl,
-                  params,
-                  querySerializer: requestQuerySerializer,
-                  pathSerializer,
-                }),
-                {
-                  redirect: "follow",
-                  ...init,
-                  method: httpMethod,
-                  body: serializedBody,
-                  headers:
-                    serializedBody === undefined || serializedBody instanceof FormData
-                      ? mergedHeaders
-                      : mergeHeaders(
-                          { "Content-Type": "application/json" },
-                          baseHeaders,
-                          headers,
-                          params.header,
-                        ),
-                },
-              );
+              if (
+                serializedBody !== undefined &&
+                !(serializedBody instanceof FormData) &&
+                !contentType &&
+                !mergedHeaders.has("Content-Type")
+              )
+                mergedHeaders.set("Content-Type", "application/json");
+              let url = localBaseUrl ? removeTrailingSlash(localBaseUrl) + path : routeUrl;
+              if (params.path)
+                url = pathSerializer
+                  ? pathSerializer(url, params.path)
+                  : (localBaseUrl ? createPathSerializer(url) : serializeRoute)(params.path);
+              const query = requestQuerySerializer(params.query ?? {}).replace(/^\?/, "");
+              if (query) url += `${url.includes("?") ? "&" : "?"}${query}`;
+              let request = new Request(url, {
+                redirect: "follow",
+                ...init,
+                method: httpMethod,
+                body: serializedBody,
+                headers: mergedHeaders,
+              });
               if (onRequest) request = await onRequest(request, path);
               const response = await fetch(request);
               const contentLength = response.headers.get("Content-Length");

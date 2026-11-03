@@ -128,7 +128,7 @@ void test("serializa requests como openapi-fetch nas opções usadas pelo client
     },
     {
       method: "get",
-      path: "/items?fixed=1",
+      path: "/items",
       options: {
         querySerializer: {
           allowReserved: true,

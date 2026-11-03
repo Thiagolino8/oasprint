@@ -4,6 +4,8 @@ Gerador de tipos OpenAPI e transporte HTTP compacto, criado para os contratos do
 
 O gerador escreve `.d.ts` diretamente, sem carregar o compilador TypeScript. As assinaturas já têm o formato `client.method["/route"](init)`, retornam o corpo da resposta e resolvem as projeções de request/response durante a geração. O browser recebe o transporte e as funções das rotas acessadas; não recebe os contratos nem uma tabela de endpoints.
 
+O transporte usa `fetch`, `Request`, `Headers`, `FormData` e `URLSearchParams` nativos, sem dependências JavaScript de produção. `openapi-fetch` fica apenas no desenvolvimento, como referência dos testes de compatibilidade. Os tipos públicos também são independentes dele.
+
 ## Instalação e uso
 
 ```sh
@@ -65,6 +67,10 @@ OpenAPI 3.0/3.1 com referências locais, métodos GET/POST/PUT/PATCH/DELETE, par
 Referências externas precisam ser preparadas em um único documento. Referências quebradas e tipos não suportados falham na geração. Recursos como HEAD/OPTIONS, `parseAs`, middleware genérico e toda a semântica JSON Schema não fazem parte do contrato deste pacote.
 
 Respostas de sucesso são JSON ou vazias. Erros carregam JSON, texto ou `undefined` na classe injetada. O parser usa `response.json()` com `Content-Length` e preserva o tratamento de corpos vazios sem esse header. Rejeições de rede e cancelamentos propagam sem serem embrulhados.
+
+O transporte compila placeholders e estilos por rota e reaproveita os estilos de query entre parâmetros da mesma chamada. Alterações nas opções de query são refletidas na chamada seguinte. Aceita path `simple`, `label` e `matrix`; query aceita arrays repetidos, CSV, espaços ou pipes, objetos `form`/`deepObject` e `allowReserved`. `querySerializer` e `pathSerializer` permitem formatos próprios; objetos aninhados em parâmetros expandidos exigem um serializer próprio. Parâmetros adicionais são anexados com `&` quando a rota já contém query.
+
+Headers escalares seguem a prioridade configuração → chamada → `params.header`; arrays em records acumulam valores e `null` remove um header. JSON recebe `Content-Type` padrão somente quando não há configuração explícita, inclusive em array. Multipart usa o boundary do browser e formulários URL-encoded usam `URLSearchParams`. Alterações de `bodySerializer(body, headers)`, inclusive remoções de headers configurados, são preservadas ao criar o `Request`.
 
 ## Geração nativa
 
