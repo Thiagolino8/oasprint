@@ -5,7 +5,7 @@ mod generator;
 // musl's allocator serializes the allocation-heavy schema workers.
 #[cfg(all(target_os = "linux", target_env = "musl"))]
 #[global_allocator]
-static ALLOCATOR: mimalloc::MiMalloc = mimalloc::MiMalloc;
+static ALLOCATOR: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
 use serde_json::{Value, json};
 use std::{

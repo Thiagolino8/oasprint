@@ -82,13 +82,13 @@ Os pacotes opcionais `oasprint-linux-{x64,arm64}`, `oasprint-darwin-{x64,arm64}`
 
 A publicação dos dois pacotes Windows está suspensa enquanto o npm revisa o bloqueio dos nomes. Seus manifests têm `private: true`, que impede a publicação, mas os binários continuam sendo compilados e testados na CI. O principal declara apenas os quatro opcionais Linux/macOS já publicados; nomes Windows sem propriedade comprovada não entram nas dependências públicas. O runtime funciona no browser em qualquer sistema, e a CLI publicada atende Linux/macOS. Em Windows nativo, a CLI depende da liberação dos pacotes; o tarball autocontido de desenvolvimento mantém os seis binários. Após a liberação, remova `private` dos manifests Windows, publique-os e adicione os opcionais ao principal em uma versão nova.
 
-Os builds Linux com musl usam mimalloc para evitar contenção de alocações entre os workers, com prioridade ao tempo de geração. Isso pode aumentar o pico de RAM em máquinas com transparent huge pages. Uma configuração com uma única API roda na própria thread. A emissão reutiliza referências e aliases já resolvidos, mantém o grafo de projeções em vetores e evita cópias dos schemas. Essas otimizações preservam os bytes gerados e o mtime de outputs idênticos.
+Os builds Linux com musl usam jemalloc para evitar contenção de alocações entre os workers. Nos sete contratos do Atlas, os testes em Linux x64 mostraram menor consumo de CPU e memória que mimalloc, sem ganho conclusivo no tempo total de execução. Uma configuração com uma única API roda na própria thread. A emissão reutiliza referências e aliases já resolvidos, mantém o grafo de projeções em vetores e evita cópias dos schemas. Essas otimizações preservam os bytes gerados e o mtime de outputs idênticos.
 
 O perfil release usa `opt-level = 2`, LTO completo e uma unidade de geração de código para reduzir os executáveis. A compilação para distribuir o pacote fica mais demorada; a instalação e a geração dos consumidores usam o binário pronto. O perfil mantém o tratamento de panics e o suporte às seis plataformas.
 
 ## Desenvolvimento e publicação
 
-Instale Rust 1.99.1 e o target da plataforma. Em Linux x64, instale também `musl-tools` e execute `rustup target add --toolchain 1.99.1 x86_64-unknown-linux-musl`. O build seleciona a toolchain explicitamente, mesmo quando chamado da raiz.
+Instale Rust 1.99.1 e o target da plataforma. Em Linux, instale também `musl-tools` e `make` para compilar jemalloc. Para Linux x64, execute `rustup target add --toolchain 1.99.1 x86_64-unknown-linux-musl`. O build seleciona a toolchain explicitamente, mesmo quando chamado da raiz.
 
 ```sh
 pnpm install --frozen-lockfile

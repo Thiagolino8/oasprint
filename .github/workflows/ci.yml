@@ -38,7 +38,7 @@ jobs:
           node-version: 24
           cache: pnpm
       - if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y musl-tools
+        run: sudo apt-get update && sudo apt-get install -y musl-tools make
       - run: rustup toolchain install 1.99.1 --profile minimal --component rustfmt --component clippy
       - run: rustup target add --toolchain 1.99.1 ${{ matrix.target }}
       - run: pnpm install --frozen-lockfile

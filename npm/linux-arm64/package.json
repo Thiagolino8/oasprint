@@ -1,6 +1,6 @@
 {
   "name": "oasprint-linux-arm64",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Binário nativo linux/arm64 do oasprint",
   "license": "MIT",
   "repository": {
