@@ -26,6 +26,8 @@ pnpm exec oasprint --config oasprint.json
 
 Roots e outputs são relativos ao diretório da configuração. Configurações e contratos aceitam apenas JSON. Para uma API remota, `root` também aceita URL HTTP/HTTPS. Contratos idênticos não são regravados; todos são preparados antes de qualquer escrita.
 
+A geração mantém cache em `.cache/oasprint/`, junto à configuração. Reutiliza os tipos quando o conteúdo do contrato, o executável, o import de runtime e o output permanecem iguais. APIs HTTP continuam sendo consultadas em toda execução; erros de rede ou contratos inválidos abortam o lote. Cada configuração guarda apenas uma entrada por output atual. O cache é opcional: falhas de leitura ou escrita apenas provocam nova geração. Use `--no-cache` para desativá-lo ou remova o diretório para limpá-lo.
+
 ```ts
 import { ApiClientError, createTypedApiClient } from "oasprint";
 import type { client } from "./service-schema";

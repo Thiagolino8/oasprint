@@ -1,6 +1,7 @@
 mod download;
 mod environment;
 mod generator;
+mod incremental;
 
 // musl's allocator serializes the allocation-heavy schema workers.
 #[cfg(all(target_os = "linux", target_env = "musl"))]
@@ -47,6 +48,7 @@ fn generate_config(
     config_path: &Path,
     runtime_import: &str,
     environment: &HashMap<String, String>,
+    use_cache: bool,
 ) -> Result<Value> {
     let config_path =
         fs::canonicalize(config_path).map_err(|e| format!("{}: {e}", config_path.display()))?;
@@ -77,21 +79,38 @@ fn generate_config(
         }
         jobs.push((root, output));
     }
+    let cache = use_cache
+        .then(|| incremental::Cache::open(&config_path, runtime_import))
+        .flatten();
     let generate = |(root, output): (&str, PathBuf)| -> Result<_> {
-        let document = if root.starts_with("https://") || root.starts_with("http://") {
-            let source = download::read(&agent, root, &rules)?;
-            parse_json(&source)
-                .map_err(|e| format!("OpenAPI: JSON inválido em {}: {e}", download::origin(root)))?
+        let remote = root.starts_with("https://") || root.starts_with("http://");
+        let source = if remote {
+            download::read(&agent, root, &rules)?
         } else {
-            read_json(&directory.join(root))?
+            let path = directory.join(root);
+            fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?
         };
+        let key = cache.as_ref().map(|cache| cache.key(&source, &output));
+        let cached = cache
+            .as_ref()
+            .and_then(|cache| key.as_ref().and_then(|key| cache.lookup(key, &output)));
+        if let Some(content) = cached {
+            return Ok((output, content, false, key));
+        }
+        let document = parse_json(&source).map_err(|e| {
+            if remote {
+                format!("OpenAPI: JSON inválido em {}: {e}", download::origin(root))
+            } else {
+                format!("{}: JSON inválido: {e}", directory.join(root).display())
+            }
+        })?;
         let content = generator::generate(&document, runtime_import)?;
         let changed = match fs::read(&output) {
             Ok(current) => current != content.as_bytes(),
             Err(error) if error.kind() == io::ErrorKind::NotFound => true,
             Err(error) => return Err(format!("{}: {error}", output.display())),
         };
-        Ok((output, content, changed))
+        Ok((output, content, changed, key))
     };
     // All workers finish before any output is written, including on failure.
     let artifacts = if jobs.len() <= 1 {
@@ -116,7 +135,7 @@ fn generate_config(
         })?
     };
     let mut updated = 0;
-    for (output, content, changed) in &artifacts {
+    for (output, content, changed, _) in &artifacts {
         if !changed {
             continue;
         }
@@ -125,6 +144,13 @@ fn generate_config(
         }
         fs::write(output, content).map_err(|e| format!("{}: {e}", output.display()))?;
         updated += 1;
+    }
+    if let Some(cache) = cache {
+        cache.publish(
+            artifacts.iter().filter_map(|(_, content, _, key)| {
+                key.as_ref().map(|key| (key, content.as_bytes()))
+            }),
+        );
     }
     Ok(json!({"apis": artifacts.len(), "updated": updated}))
 }
@@ -135,12 +161,13 @@ fn run() -> Result<()> {
     let mut stdin = false;
     let mut json = false;
     let mut load_env = true;
+    let mut use_cache = true;
     let mut args = env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--help" | "-h" => {
                 println!(
-                    "oasprint [--config <oasprint.json>] [--runtime-import <module>]\n\nGera clientes tipados a partir de OpenAPI JSON.\n--stdin       Lê um schema JSON de stdin e emite os tipos em stdout\n--no-env      Não carrega .env\n--json        Emite o resumo como JSON\n--version     Exibe a versão\n\nHUB_PREPARED_OPENAPI_CONFIG seleciona uma configuração JSON preparada."
+                    "oasprint [--config <oasprint.json>] [--runtime-import <module>]\n\nGera clientes tipados a partir de OpenAPI JSON.\n--stdin       Lê um schema JSON de stdin e emite os tipos em stdout\n--no-env      Não carrega .env\n--no-cache    Ignora o cache incremental\n--json        Emite o resumo como JSON\n--version     Exibe a versão\n\nHUB_PREPARED_OPENAPI_CONFIG seleciona uma configuração JSON preparada."
                 );
                 return Ok(());
             }
@@ -157,6 +184,7 @@ fn run() -> Result<()> {
             "--stdin" => stdin = true,
             "--json" => json = true,
             "--no-env" => load_env = false,
+            "--no-cache" => use_cache = false,
             _ => return Err(format!("Argumento desconhecido: {arg}")),
         }
     }
@@ -191,7 +219,12 @@ fn run() -> Result<()> {
     let config_path = config_path
         .or(prepared)
         .unwrap_or_else(|| "oasprint.json".into());
-    let summary = generate_config(Path::new(&config_path), &runtime_import, &environment)?;
+    let summary = generate_config(
+        Path::new(&config_path),
+        &runtime_import,
+        &environment,
+        use_cache,
+    )?;
     if json {
         println!("{summary}");
     } else {
